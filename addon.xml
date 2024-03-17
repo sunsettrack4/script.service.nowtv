@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.service.nowtv" name="NOW TV Streamer" version="1.0.2" provider-name="Jan-Luca Neumann">
+  <requires>
+      <import addon="xbmc.python" version="3.0.0"/>
+      <import addon="script.module.requests"/>
+      <import addon="script.module.bottle"/>
+      <import addon="script.module.xmltodict"/>
+  </requires>
+  <extension point="xbmc.service" library="service.py" start="startup" />
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">NOW TV Streamer</summary>
+    <summary lang="de_DE">WOW Streamer</summary>
+    <description lang="en_GB">Service add-on providing the NOW TV streams
+    
+* IPTV Simple Configuration
+M3U URL: http://localhost:4800/api/file/channels.m3u
+EPG URL: http://localhost:4800/api/file/epg.xml</description>
+    <description lang="de_DE">Service-Addon zur lokalen Bereitstellung der WOW-Streams
+    
+* IPTV Simple-Konfiguration
+M3U URL: http://localhost:4800/api/file/channels.m3u
+EPG URL: http://localhost:4800/api/file/epg.xml</description>
+    <disclaimer lang="en_GB">Widevine is required to watch the streams.</disclaimer>
+    <disclaimer lang="de_DE">Widevine wird für das Abspielen der Streams benötigt.</disclaimer>
+    <platform>all</platform>
+    <license>GPL-3.0-or-later</license>
+    <website>https://wowtv.de</website>
+    <email>sunsettrack4@gmail.com</email>
+    <source>http://github.com/sunsettrack4/script.service.nowtv</source>
+    <assets>
+      <icon>icon.png</icon>
+      <screenshot>resources/screen1.png</screenshot>
+      <fanart>resources/fanart.png</fanart>
+    </assets>
+  </extension>
+</addon>
