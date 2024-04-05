@@ -355,94 +355,103 @@ def channel_list(session, epg=False):
 
 def content_mpd(session, c_type, c_id):
 
-    dolby_enabled = True if __addon__.getSetting("dolby_enabled") == "true" else False
-    hd_enabled = True if __addon__.getSetting("hd_enabled") == "true" else False
+    if release_pids.get(c_id, {"exp": 0})["exp"] <= int(datetime.now().timestamp()):
 
-    r = requests.Session()
-    r.headers = headers
-    r.headers.update({"x-skyott-usertoken": session["user_token"], 'x-skyott-pinoverride': 'true', 'Content-Type': f'application/vnd.play{c_type}.v1+json'})
+        dolby_enabled = True if __addon__.getSetting("dolby_enabled") == "true" else False
+        hd_enabled = True if __addon__.getSetting("hd_enabled") == "true" else False
 
-    data = {
-        "device": {
-        "capabilities": [
-            {
-              "transport": "DASH",
-              "protection": "WIDEVINE",
-              "vcodec": "H264",
-              "acodec": "AAC",
-              "container": "TS"
-            },
-            {
-              "transport": "DASH",
-              "protection": "WIDEVINE",
-              "vcodec": "H264",
-              "acodec": "AAC",
-              "container": "ISOBMFF"
-            }           
-        ],
-        "model": "PC",
-        "hdcpEnabled": "false",
-        "supportedColourSpaces": []
-      },
-      "client": {
-        "thirdParties": []
-      },
-      "parentalControlPin": None
-    }
+        r = requests.Session()
+        r.headers = headers
+        r.headers.update({"x-skyott-usertoken": session["user_token"], 'x-skyott-pinoverride': 'true', 'Content-Type': f'application/vnd.play{c_type}.v1+json'})
 
-    if c_type == "live":
-        data["serviceKey"] = c_id
-    elif c_type == "vod":
-        data["contentId"] = c_id
-        data["providerVariantId"] = c_id
-
-    if dolby_enabled:
-        data["device"]["capabilities"].extend([
-            {
-              "transport": "DASH",
-              "protection": "WIDEVINE",
-              "vcodec": "H264",
-              "acodec": "EAC",
-              "container": "TS"
-            },
-            {
-              "transport": "DASH",
-              "protection": "WIDEVINE",
-              "vcodec": "H264",
-              "acodec": "EAC",
-              "container": "ISOBMFF"
-            }  
-        ])
-
-    if hd_enabled:
-        data["device"]["maxVideoFormat"] = "UHD"
-
-    signature = tools.calculate_signature('POST', f'{p_url}/video/playouts/{c_type}', headers, json.dumps(data))
-    r.headers.update({'x-sky-signature': signature})
-
-    ch = r.post(f'{p_url}/video/playouts/{c_type}', json=data)
-
-    try:
-        mpd_url = ch.json()['asset']['endpoints'][0]['url']
-        wv_url = ch.json()['protection']['licenceAcquisitionUrl']
-
-        mpd = requests.get(mpd_url)
-        xml = xmltodict.parse(mpd.content)
+        data = {
+            "device": {
+            "capabilities": [
+                {
+                "transport": "DASH",
+                "protection": "WIDEVINE",
+                "vcodec": "H264",
+                "acodec": "AAC",
+                "container": "TS"
+                },
+                {
+                "transport": "DASH",
+                "protection": "WIDEVINE",
+                "vcodec": "H264",
+                "acodec": "AAC",
+                "container": "ISOBMFF"
+                }           
+            ],
+            "model": "PC",
+            "hdcpEnabled": "false",
+            "supportedColourSpaces": []
+        },
+        "client": {
+            "thirdParties": []
+        },
+        "parentalControlPin": None
+        }
 
         if c_type == "live":
-            xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
+            data["serviceKey"] = c_id
         elif c_type == "vod":
-            xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
+            data["contentId"] = c_id
+            data["providerVariantId"] = c_id
 
-        release_pids[c_id] = wv_url
+        if dolby_enabled:
+            data["device"]["capabilities"].extend([
+                {
+                "transport": "DASH",
+                "protection": "WIDEVINE",
+                "vcodec": "H264",
+                "acodec": "EAC",
+                "container": "TS"
+                },
+                {
+                "transport": "DASH",
+                "protection": "WIDEVINE",
+                "vcodec": "H264",
+                "acodec": "EAC",
+                "container": "ISOBMFF"
+                }  
+            ])
 
-        return xmltodict.unparse(xml, pretty=True)
-    except Exception as e:
-        if "necessary role" in str(ch.content):
-            xbmcgui.Dialog().notification(__addonname__, f"Missing subscription for the requested content", xbmcgui.NOTIFICATION_ERROR)
-        else:
-            xbmcgui.Dialog().notification(__addonname__, f"Failed to load the playlist: {str(e)} / {str(ch.content)}", xbmcgui.NOTIFICATION_ERROR)
-        return
+        if hd_enabled:
+            data["device"]["maxVideoFormat"] = "UHD"
+
+        signature = tools.calculate_signature('POST', f'{p_url}/video/playouts/{c_type}', headers, json.dumps(data))
+        r.headers.update({'x-sky-signature': signature})
+
+        ch = r.post(f'{p_url}/video/playouts/{c_type}', json=data)
+
+        try:
+            mpd_url = ch.json()['asset']['endpoints'][0]['url'].split("?")[0]
+            wv_url = ch.json()['protection']['licenceAcquisitionUrl']
+            exp = int(datetime.now().timestamp()) + 300
+
+        except Exception as e:
+            if "necessary role" in str(ch.content):
+                xbmcgui.Dialog().notification(__addonname__, f"Missing subscription for the requested content", xbmcgui.NOTIFICATION_ERROR)
+            else:
+                xbmcgui.Dialog().notification(__addonname__, f"Failed to load the playlist: {str(e)} / {str(ch.content)}", xbmcgui.NOTIFICATION_ERROR)
+            return
+
+    else:
+        mpd_url = release_pids[c_id]["mpd"]
+        wv_url = release_pids[c_id]["wv"]
+        exp = release_pids[c_id]["exp"]
+
+    mpd = requests.get(mpd_url)
+    xml = xmltodict.parse(mpd.content)
+
+    if c_type == "live":
+        xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
+    elif c_type == "vod":
+        xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
+
+    release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "exp": exp}
+
+    return xmltodict.unparse(xml, pretty=True)
 
 
 #
@@ -454,9 +463,9 @@ def content_license(c_id, cdm_payload):
     while True:
         if release_pids.get(c_id):
             try:
-                signature = tools.calculate_signature('POST', release_pids[c_id], {}, cdm_payload)
+                signature = tools.calculate_signature('POST', release_pids[c_id]["wv"], {}, cdm_payload)
                 drm_headers = {'x-sky-signature': signature}
-                cdm_request = requests.post(release_pids[c_id], headers=drm_headers, data=cdm_payload)
+                cdm_request = requests.post(release_pids[c_id]["wv"], headers=drm_headers, data=cdm_payload)
                 try:
                     j = json.loads(cdm_request.content)
                     if j.get("description"):
