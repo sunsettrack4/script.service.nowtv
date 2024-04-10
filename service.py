@@ -28,6 +28,8 @@ p_url = "https://p.sky.com"
 graph_url = "https://graphql.ott.sky.com"
 
 live_hash = "356b08a537f119347994744194e5c42f61fba5ccf5ffbd31bd25af626a2043b5"
+watchlist_hash = "02c3f55fc1b6ed910f51c9bf0c71d58b29ea729be2e75795bd36bb3d1e50aded"
+continue_hash = "4798dcbdcf7e2bb9f495a3e379d50e7c7cb13c2e2da21c04a2bc3340ce73172b"
 
 
 # KODI PARAMS
@@ -83,6 +85,32 @@ class WebServer():
     def get_license(self, c_id, cdm_payload):
         return content_license(c_id, cdm_payload)
     
+    def get_watchlist(self):
+        watchlist = personalized_content(self.session, "watchlist")
+
+        if not watchlist:
+            self.session = login()
+
+            if not self.session:
+                return
+            else:
+                watchlist = personalized_content(self.session, "watchlist")
+        
+        return watchlist
+
+    def get_continue(self):
+        continue_watching = personalized_content(self.session, "continue")
+
+        if not watchlist:
+            self.session = login()
+
+            if not self.session:
+                return
+            else:
+                continue_watching = personalized_content(self.session, "continue")
+        
+        return continue_watching
+  
     def stop_kodi(self):
         # IT'S NOT THE BEST SOLUTION... BUT IT WORKS.
         requests.get("http://localhost:4800")
@@ -102,6 +130,16 @@ def m3u():
 def epg():
     response.set_header("Content-Type", "application/xml")
     return w.get_ch_list(True)
+
+@route("/api/file/watchlist.json", method="GET")
+def watchlist():
+    response.set_header("Content-Type", "application/json")
+    return w.get_watchlist()
+
+@route("/api/file/continue.json", method="GET")
+def continue_watching():
+    response.set_header("Content-Type", "application/json")
+    return w.get_continue()
 
 @route("/api/<content_type>/<content_id>/manifest.mpd", method="GET")
 def play_channel(content_type, content_id):
@@ -429,6 +467,22 @@ def content_mpd(session, c_type, c_id):
             wv_url = ch.json()['protection']['licenceAcquisitionUrl']
             exp = int(datetime.now().timestamp()) + 300
 
+            # Add content to continueWatching list
+            try:
+                if c_type == "vod":
+                    ticket_id = ch.json()['session']['streamingTicketId']
+                    ticket_url = f"{p_url}/concurrency/streams/{ticket_id}"
+
+                    del r.headers['x-sky-signature']
+                    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
+                    signature = tools.calculate_signature('PUT', ticket_url, headers, json.dumps({"streamPosition": 0}))
+                    r.headers.update({'x-sky-signature': signature})
+
+                    r.put(ticket_url, json={"streamPosition": 0})
+                    del r.headers["x-sky-signature"], r.headers["Content-Type"]
+            except:
+                pass
+
         except Exception as e:
             if "necessary role" in str(ch.content):
                 xbmcgui.Dialog().notification(__addonname__, f"Missing subscription for the requested content", xbmcgui.NOTIFICATION_ERROR)
@@ -490,6 +544,35 @@ def content_license(c_id, cdm_payload):
         time.sleep(0.3)
     xbmcgui.Dialog().notification(__addonname__, f"No license url found for content id {c_id}.", xbmcgui.NOTIFICATION_ERROR)
     return
+
+
+#
+# PERSONALIZED - WATCHLIST/CONTINUE WATCHING
+#
+
+def personalized_content(session, p_type="watchlist"):
+
+    getWatchlist = "true" if p_type == "watchlist" else "false"
+    getContinueWatching = "true" if p_type == "continue" else "false"
+    sha256Hash = watchlist_hash if p_type == "watchlist" else continue_hash
+
+    extensions = '{"persistedQuery":{"version":1,"sha256Hash":"'+sha256Hash+'"}}'
+    variables  = '{"fullWidthHeroImages":false,"getContinueWatching":'+getContinueWatching+',"getWatchlist":'+getWatchlist+',"getFavourites":false,"getBecauseYouWatched":false,"getPersonalisedGenres":false}'
+    
+    url = f"{graph_url}/personalised?extensions={quote(extensions)}&variables={quote(variables)}"
+    
+    r = requests.Session()
+    r.headers = headers
+    r.headers.update({"x-skyott-usertoken": session["user_token"]})
+
+    me = r.get(url)
+    del r.headers["x-skyott-usertoken"]
+
+    try:
+        return me.json()
+    except Exception as e:
+        xbmcgui.Dialog().notification(__addonname__, f"Failed to load personalized content: {str(e)}", xbmcgui.NOTIFICATION_ERROR)
+        return
 
 
 #
