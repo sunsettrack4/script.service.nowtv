@@ -57,7 +57,10 @@ class WebServer():
         run(host='0.0.0.0', port=4800, debug=False, quiet=True)
 
     def get_ch_list(self, epg=False):
-        ch_list = channel_list(self.session, epg)
+        try:
+            ch_list = channel_list(self.session, epg)
+        except:
+            ch_list = None
 
         if not ch_list:
             self.session = login()
@@ -70,7 +73,10 @@ class WebServer():
         return ch_list
 
     def get_content(self, c_type, c_id):
-        mpd = content_mpd(self.session, c_type, c_id)
+        try:
+            mpd = content_mpd(self.session, c_type, c_id)
+        except:
+            mpd = None
         
         if not mpd:
             self.session = login()
@@ -86,7 +92,10 @@ class WebServer():
         return content_license(c_id, cdm_payload)
     
     def get_watchlist(self):
-        watchlist = personalized_content(self.session, "watchlist")
+        try:
+            watchlist = personalized_content(self.session, "watchlist")
+        except:
+            watchlist = None
 
         if not watchlist:
             self.session = login()
@@ -99,9 +108,12 @@ class WebServer():
         return watchlist
 
     def get_continue(self):
-        continue_watching = personalized_content(self.session, "continue")
+        try:
+            continue_watching = personalized_content(self.session, "continue")
+        except:
+            continue_watching = None
 
-        if not watchlist:
+        if not continue_watching:
             self.session = login()
 
             if not self.session:
@@ -163,13 +175,15 @@ def login():
         with open(f"{__addondir__}session.json", "r") as f:
             session = json.load(f)
     except:
+        xbmc.log("INFO: Failed to read the session file")
         session = {}
 
     if session.get("user_t_exp"):
         try:
-            if datetime(*(time.strptime(session["user_t_exp"].split(".")[0], "%Y-%m-%dT%H:%M:%S")[0:6])).timestamp() >= datetime.now().timestamp():
+            if datetime(*(time.strptime(session["user_t_exp"].split(".")[0], "%Y-%m-%dT%H:%M:%S")[0:6])).timestamp() >= datetime.now().timestamp() - 300:
                 return session
             else:
+                xbmc.log("INFO: Session token expired")
                 session = {}
         except:
             session = {}
@@ -180,6 +194,7 @@ def login():
 
     if not __username or not __password:
         xbmcgui.Dialog().notification(__addonname__, "Please add your credentials in add-on settings.", xbmcgui.NOTIFICATION_ERROR)
+        xbmc.log("ERROR: Please add your credentials in add-on settings.")
         return
 
     # RETRIEVE SESSION DATA
@@ -201,9 +216,11 @@ def login():
 
         if account.status_code == 422:
             xbmcgui.Dialog().notification(__addonname__, "Error: Authentication failure - invalid credentials", xbmcgui.NOTIFICATION_ERROR)
+            xbmc.log("ERROR: Authentication failure - invalid credentials")
             return
         elif account.status_code == 403:
             xbmcgui.Dialog().notification(__addonname__, "Error: Resource unavailable, please check your IP address.", xbmcgui.NOTIFICATION_ERROR)
+            xbmc.log("ERROR: Resource unavailable, please check your IP address.")
             return
 
         try:
@@ -214,7 +231,8 @@ def login():
             x_sky_id_token = cookies['skyCEsidismesso01']
             auth_token = cookies['skyCEsidexsso01']
         except Exception as e:
-            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}", xbmcgui.NOTIFICATION_ERROR)        
+            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}", xbmcgui.NOTIFICATION_ERROR)
+            xbmc.log(f"ERROR: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}")
             return
 
         # RETRIEVE PERSONA ID
@@ -230,7 +248,8 @@ def login():
         try:
             persona_id = persona.json()['personas'][0]['personaId']
         except Exception as e:
-            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve persona id: {str(e)} / {str(persona.content)}", xbmcgui.NOTIFICATION_ERROR)        
+            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve persona id: {str(e)} / {str(persona.content)}", xbmcgui.NOTIFICATION_ERROR)
+            xbmc.log(f"ERROR: Unable to retrieve persona id: {str(e)} / {str(persona.content)}")
             return
         
         device_id = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
@@ -248,6 +267,7 @@ def login():
         user_token = token.json()['userToken']
     except Exception as e:
         xbmcgui.Dialog().notification(__addonname__,f"Error: Unable to retieve user token: {str(e)} / {str(token.content)}", xbmcgui.NOTIFICATION_ERROR)        
+        xbmc.log(f"ERROR: Unable to retieve user token: {str(e)} / {str(token.content)}")
         return
     
     session = dict()
@@ -266,6 +286,7 @@ def login():
         with open(f"{__addondir__}session.json", "w") as f:
             f.write(json.dumps(session))
     except:
+        xbmc.log(f"WARNING: Failed to save session file")
         pass
     
     return session
