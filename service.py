@@ -21,7 +21,7 @@ headers = {
     "sec-ch-ua-Mobile": "?0"
 }
 
-ui_url = "http://uiapi.id.wowtv.de"
+ui_url = "http://rango.id.wowtv.de"
 persona_url = "https://persona-store.sky.com"
 auth_url = "https://auth.client.ott.sky.com"
 p_url = "https://p.sky.com"
@@ -184,7 +184,8 @@ def login():
                 return session
             else:
                 xbmc.log("INFO: Session token expired")
-                session = {}
+                del session["user_t_exp"]
+                del session["user_token"]
         except:
             session = {}
 
