@@ -11,6 +11,7 @@ release_pids = {}
     
 headers = {
     "x-skyott-device": "TV",
+    "x-skyott-language": "de",
     "x-skyott-platform": "ANDROIDTV",
     "x-skyott-proposition": "NOWTV",
     "x-skyott-provider": "NOWTV",
@@ -28,8 +29,8 @@ p_url = "https://p.sky.com"
 graph_url = "https://graphql.ott.sky.com"
 
 live_hash = "356b08a537f119347994744194e5c42f61fba5ccf5ffbd31bd25af626a2043b5"
-watchlist_hash = "02c3f55fc1b6ed910f51c9bf0c71d58b29ea729be2e75795bd36bb3d1e50aded"
-continue_hash = "4798dcbdcf7e2bb9f495a3e379d50e7c7cb13c2e2da21c04a2bc3340ce73172b"
+watchlist_hash = "bf69938e7d2b6e17aeb4aeb438253b0afbfae04454447ee0143373abd93f04da"
+continue_hash = "bf69938e7d2b6e17aeb4aeb438253b0afbfae04454447ee0143373abd93f04da"
 
 
 # KODI PARAMS
