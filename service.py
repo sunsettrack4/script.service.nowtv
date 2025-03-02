@@ -1,4 +1,4 @@
-from bottle import request, response, route, run
+from bottle import request, response, route, run, static_file
 from datetime import datetime, timezone
 from resources.lib import tools
 from urllib.parse import quote
@@ -37,6 +37,7 @@ continue_hash = "bf69938e7d2b6e17aeb4aeb438253b0afbfae04454447ee0143373abd93f04d
 __addon__ = xbmcaddon.Addon()
 __addonname__ = __addon__.getAddonInfo('name')
 __addondir__    = xbmcvfs.translatePath(__addon__.getAddonInfo('profile'))
+__addonpath__   = xbmcvfs.translatePath(__addon__.getAddonInfo('path'))
 
 
 #
@@ -163,6 +164,32 @@ def play_channel(content_type, content_id):
 def proxy_license(content_type, content_id):
     response.set_header("Content-Type", "application/octet-stream")
     return w.get_license(content_id, request.body.read())
+
+@route("/auth", method="GET")
+def auth_get():
+    q = dict(request.query.decode())
+
+    if all(i in q for i in ("auth_token", "persona_id", "device_id")):
+        session = dict()
+
+        # SETUP NEW SESSION
+        session.update({
+            "persona_id": q["persona_id"],    # PERSONA ID
+            "auth_token": q["auth_token"],    # AUTH TOKEN
+            "device_id": q["device_id"]       # DEVICE ID
+        })
+
+        # SAVE NEW SESSION
+        try:
+            with open(f"{__addondir__}session.json", "w") as f:
+                f.write(json.dumps(session))
+        except:
+            xbmc.log(f"WARNING: Failed to save session file")
+            pass
+        
+        return "Your cookies have been transmitted to your device. Please restart Kodi."
+    else:
+        return static_file("input.html", root=__addonpath__)
 
 
 #
