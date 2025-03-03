@@ -191,6 +191,60 @@ def auth_get():
     else:
         return static_file("input.html", root=__addonpath__)
 
+@route("/key", method="GET")
+def auth_key():
+    return static_file("key.html", root=__addonpath__)
+
+@route("/key", method="POST")
+def auth_key_upload():
+    try:
+        session = dict()
+        messo = None
+
+        f = json.loads(request.files.key.file.read())["data"].split(";")
+        
+        for i in f:
+            if "personaId" in i:
+                session.update({"persona_id": i.split("=")[1]})
+            elif "skyCEsidexsso01" in i:
+                session.update({"auth_token": i.split("=")[1]})
+            elif "deviceid" in i:
+                session.update({"device_id": i.split("=")[1]})
+            elif "skyCEsidismesso01" in i:
+                messo = i.split("=")[1]
+        
+        if not session.get("persona_id") and messo:
+            r = requests.Session()
+            r.headers = headers
+            r.headers.update({"x-skyott-territory": __addon__.getSetting("platform_id")})
+            r.headers.update({
+                'X-Skyid-Token': messo,
+                'X-Skyott-Tokentype': 'MESSO',
+                "Accept": "application/vnd.persona.v1+json"
+            })
+
+            persona = r.get(f'{persona_url}/persona-store/personas')
+            
+            try:
+                session.update({"persona_id": persona.json()['personas'][0]['personaId']})
+            except Exception:
+               return "Failed to obtain the personaId."
+            
+        # SAVE NEW SESSION
+        if "persona_id" in session and "auth_token" in session and "device_id" in session:
+            try:
+                with open(f"{__addondir__}session.json", "w") as f:
+                    f.write(json.dumps(session))
+            except:
+                return "Failed to save session file."
+        else:
+            return "Failed to retrieve the cookie data."
+        
+        return "Your cookies have been transmitted to your device. Please restart Kodi."
+            
+    except Exception as e:
+        return f"Invalid file {str(e)}"
+
 
 #
 # LOGIN
@@ -260,8 +314,12 @@ def login():
             x_sky_id_token = cookies['skyCEsidismesso01']
             auth_token = cookies['skyCEsidexsso01']
         except Exception as e:
-            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}", xbmcgui.NOTIFICATION_ERROR)
-            xbmc.log(f"ERROR: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}")
+            if "289" in str(account.content):
+                xbmcgui.Dialog().notification(__addonname__, f"Error: Login failed - captcha challenge is required", xbmcgui.NOTIFICATION_ERROR)
+                xbmc.log(f"ERROR: Login failed - captcha challenge is required")
+            else:
+                xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}", xbmcgui.NOTIFICATION_ERROR)
+                xbmc.log(f"ERROR: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}")
             return
 
         # RETRIEVE PERSONA ID
@@ -295,8 +353,8 @@ def login():
     try:
         user_token = token.json()['userToken']
     except Exception as e:
-        xbmcgui.Dialog().notification(__addonname__,f"Error: Unable to retieve user token: {str(e)} / {str(token.content)}", xbmcgui.NOTIFICATION_ERROR)        
-        xbmc.log(f"ERROR: Unable to retieve user token: {str(e)} / {str(token.content)}")
+        xbmcgui.Dialog().notification(__addonname__,f"Error: Unable to retrieve user token: {str(e)} / {str(token.content)}", xbmcgui.NOTIFICATION_ERROR)        
+        xbmc.log(f"ERROR: Unable to retrieve user token: {str(e)} / {str(token.content)}")
         return
     
     session = dict()
