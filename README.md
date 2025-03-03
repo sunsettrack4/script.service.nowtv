@@ -7,5 +7,5 @@ Service add-on providing the NOW TV streams
 - EPG URL: http://localhost:4800/api/file/epg.xml
 
 ### Cookie authentication forms
-http://localhost:4800/auth
-http://localhost:4800/key
+- http://localhost:4800/auth
+- http://localhost:4800/key
