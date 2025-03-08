@@ -90,7 +90,7 @@ class WebServer():
         
         return mpd
 
-    def get_license(self, c_id, cdm_payload):
+    def get_license(self, c_id, cdm_payload=None):
         return content_license(c_id, cdm_payload)
     
     def get_watchlist(self):
@@ -164,6 +164,11 @@ def play_channel(content_type, content_id):
 def proxy_license(content_type, content_id):
     response.set_header("Content-Type", "application/octet-stream")
     return w.get_license(content_id, request.body.read())
+
+@route("/api/<content_type>/<content_id>/license", method="GET")
+def proxy_license(content_type, content_id):
+    response.set_header("Content-Type", "text")
+    return w.get_license(content_id)
 
 @route("/auth", method="GET")
 def auth_get():
@@ -475,14 +480,25 @@ def channel_list(session, epg=False):
 
                 else:
 
-                    output = \
-                        f'{output}' \
-                        f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
-                        f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
-                        f'#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha\n' \
-                        f'#KODIPROP:inputstream.adaptive.license_key=http://localhost:4800/api/live/{chan["serviceKey"]}/license||R' + '{SSM}|\n' \
-                        f'#EXTINF:0001 tvg-id="{chan["name"].replace(" SD", "")}" tvg-logo="{chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")}", {chan["name"].replace(" SD", "")}\n' \
-                        f'http://localhost:4800/api/live/{chan["serviceKey"]}/manifest.mpd\n'
+                    if not xbmc.getCondVisibility('system.platform.android'):
+
+                        output = \
+                            f'{output}' \
+                            f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
+                            f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
+                            f'#EXTINF:0001 tvg-id="{chan["name"].replace(" SD", "")}" tvg-logo="{chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")}", {chan["name"].replace(" SD", "")}\n' \
+                            f'plugin://plugin.video.nowtv/?type=live&location={chan["serviceKey"]}\n'
+
+                    else:
+
+                        output = \
+                            f'{output}' \
+                            f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
+                            f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
+                            f'#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha\n' \
+                            f'#KODIPROP:inputstream.adaptive.license_key=http://localhost:4800/api/live/{chan["serviceKey"]}/license||R' + '{SSM}|\n' \
+                            f'#EXTINF:0001 tvg-id="{chan["name"].replace(" SD", "")}" tvg-logo="{chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")}", {chan["name"].replace(" SD", "")}\n' \
+                            f'http://localhost:4800/api/live/{chan["serviceKey"]}/manifest.mpd\n'
         
         if epg:
             output["tv"]["channel"] = ch["channel"]
@@ -621,6 +637,14 @@ def content_mpd(session, c_type, c_id):
 #
 
 def content_license(c_id, cdm_payload):
+    if not cdm_payload:
+       try:
+            d = tools.get_cdm_keys(release_pids[c_id]["mpd"], release_pids[c_id]["wv"].split('|')[0], headers["user-agent"])
+            return d['key']
+       except:
+           xbmcgui.Dialog().notification(__addonname__, f"Failed to load the license: {str(d['error'])}", xbmcgui.NOTIFICATION_ERROR)
+           return
+
     x = 10
     while True:
         if release_pids.get(c_id):

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.service.nowtv" name="NOW TV Streamer" version="1.0.8" provider-name="Jan-Luca Neumann">
+<addon id="script.service.nowtv" name="NOW TV Streamer" version="1.0.9" provider-name="Jan-Luca Neumann">
   <requires>
       <import addon="xbmc.python" version="3.0.0"/>
       <import addon="script.module.requests"/>
@@ -28,8 +28,6 @@ EPG URL: http://localhost:4800/api/file/epg.xml
 * Anmeldung:
 http://localhost:4800/auth
 http://localhost:4800/key</description>
-    <disclaimer lang="en_GB">Widevine is required to watch the streams.</disclaimer>
-    <disclaimer lang="de_DE">Widevine wird für das Abspielen der Streams benötigt.</disclaimer>
     <platform>all</platform>
     <license>GPL-3.0-or-later</license>
     <website>https://wowtv.de</website>
