@@ -623,7 +623,11 @@ def content_mpd(session, c_type, c_id):
     xml = xmltodict.parse(mpd.content)
 
     if c_type == "live":
-        xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
+        if type(xml["MPD"]["Period"]) == list:
+            for i in xml["MPD"]["Period"]:
+                i["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
+        else:        
+            xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
     elif c_type == "vod":
         xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
 
