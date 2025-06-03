@@ -124,7 +124,20 @@ class WebServer():
                 continue_watching = personalized_content(self.session, "continue")
         
         return continue_watching
-  
+
+    def playback_position(self, c_id, position):
+        if release_pids.get(c_id, {}).get("track") is None:
+            return
+
+        tracked = track_playback_position(self.session, release_pids[c_id]["track"], int(position))
+        if not tracked:
+            self.session = login()
+
+            if not self.session:
+                return
+            else:
+                track_playback_position(self.session, release_pids[c_id]["track"], int(position))
+
     def stop_kodi(self):
         # IT'S NOT THE BEST SOLUTION... BUT IT WORKS.
         requests.get("http://localhost:4800")
@@ -250,6 +263,9 @@ def auth_key_upload():
     except Exception as e:
         return f"Invalid file {str(e)}"
 
+@route("/api/<content_id>/playback/<position>", method="POST")
+def playback_position(content_id, position):
+    w.playback_position(content_id, position)
 
 #
 # LOGIN
@@ -589,23 +605,8 @@ def content_mpd(session, c_type, c_id):
         try:
             mpd_url = ch.json()['asset']['endpoints'][0]['url'].split("?")[0]
             wv_url = ch.json()['protection']['licenceAcquisitionUrl']
+            track_url = ch.json()['events']['heartbeat']['url']
             exp = int(datetime.now().timestamp()) + 300
-
-            # Add content to continueWatching list
-            try:
-                if c_type == "vod":
-                    ticket_id = ch.json()['session']['streamingTicketId']
-                    ticket_url = f"{p_url}/concurrency/streams/{ticket_id}"
-
-                    del r.headers['x-sky-signature']
-                    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
-                    signature = tools.calculate_signature('PUT', ticket_url, headers, json.dumps({"streamPosition": 0}))
-                    r.headers.update({'x-sky-signature': signature})
-
-                    r.put(ticket_url, json={"streamPosition": 0})
-                    del r.headers["x-sky-signature"], r.headers["Content-Type"]
-            except:
-                pass
 
         except Exception as e:
             if "necessary role" in str(ch.content):
@@ -617,6 +618,7 @@ def content_mpd(session, c_type, c_id):
     else:
         mpd_url = release_pids[c_id]["mpd"]
         wv_url = release_pids[c_id]["wv"]
+        track_url = release_pids[c_id]["track"]
         exp = release_pids[c_id]["exp"]
 
     mpd = requests.get(mpd_url)
@@ -631,7 +633,7 @@ def content_mpd(session, c_type, c_id):
     elif c_type == "vod":
         xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
 
-    release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "exp": exp}
+    release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "track": track_url, "exp": exp}
 
     return xmltodict.unparse(xml, pretty=True)
 
@@ -710,6 +712,27 @@ def personalized_content(session, p_type="watchlist"):
         xbmcgui.Dialog().notification(__addonname__, f"Failed to load personalized content: {str(e)}", xbmcgui.NOTIFICATION_ERROR)
         return
 
+#
+# TRACK PLAYBACK POSITION
+#
+def track_playback_position(session, url, position):
+
+    data = {"streamPosition": position}
+
+    r = requests.Session()
+    r.headers = headers
+    r.headers.update({"x-skyott-usertoken": session["user_token"]})
+    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
+    signature = tools.calculate_signature('PUT', url, headers, json.dumps(data))
+    r.headers.update({'x-sky-signature': signature})
+
+    res = r.put(url, json=data)
+    del r.headers["x-skyott-usertoken"], r.headers["Content-Type"], r.headers["x-sky-signature"]
+
+    if res.status_code == 204:
+        return True
+    else:
+        return False
 
 #
 # MAIN PROCESS
