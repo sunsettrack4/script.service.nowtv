@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from dateutil import tz
 from resources.lib import tools
 from urllib.parse import quote
-import json, requests, time, xbmc, xbmcaddon, xbmcgui, xbmcvfs, xmltodict
+import json, os, requests, time, xbmc, xbmcaddon, xbmcgui, xbmcvfs, xmltodict
 
 
 release_pids = {}
@@ -141,6 +141,11 @@ def auth_json():
 @route("/key", method="POST")
 @route("/auth", method="POST")
 def auth_key_upload():
+    try:
+        os.mkdir(__addondir__)
+    except:
+        pass
+
     try:
         session = dict()
         f = []
