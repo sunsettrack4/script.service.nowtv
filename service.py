@@ -331,7 +331,23 @@ def channel_list(session, epg=False):
     ch = {"channel": []}
     pr = {"programme": []}
     
-    try:    
+    try:
+        certificate = (
+            'Cr4CCAMSEN41PnjoV2GYRkwx+pafn3AYkt/ygAYijgIwggEKAoIBAQDU59zNRn0kxM00V4uLWYqN'
+            '47dMLA9i3GDotI+yEJPQ76khlvFPlfevr3n0I9/M4Oiy2ub97y4MGkiB37Btgz5cvKQbVc7iJBlS'
+            'LmZ58R8Pebkj6uG/RLtXN+zs/UQn7vDDqKcc2qDKiZO9pkiAK5RhZHCXvIzW4gGGO2HPSCNduSrM'
+            '5mDEOWs3L46u1lmf1lOda/T46PiNE5e4OPzcncf8opRyvN2kw34IY6R20fwtQRTnkDdj7gyqOcVt'
+            'YfUQ5NNdqhg84OH72y12a0vi1qqrLv/6Frp9HLbqIdHM7zKUmrsrVSlUjjdlrg/YF3lTRy6kn/Jb'
+            'jdVZOrganZqecK9nAgMBAAE6DXBlYWNvY2t0di5jb21AAUgBEoADCbIGMPBYtiPuHYg4WPCVgJIt'
+            'KgsrIiwO9/GX+0dpYbaRSiq+2rNcybsl0juP+jRGantYOsylf0j2BYFHVEnVkb9mfsW36YlHYBsH'
+            'GTNt6IsK7GeV6BiPc0S2s2ll9N8ofU3cqRTzPvGojs5LoQ1HWO9tDrgYLohwFG+2BIimJERdbkSy'
+            'nR0NoTZjeBIzTVW8tdDQ+yPZqUtWu3SpDBeksvcDmrTCvQZMZNb3aSh2Q1bKA8/DV7UGMMBtJvjs'
+            '5hn2tVNJ+7n6oW878y9ThzqtpMvGnsS8iMit5e/Wzku0KwgHNwjfsNtVCJo1fLsmE9wAs7SOY1ql'
+            'UtnCD37Bh0e7v1HYzhwAqLvorqzpRGB7sy97XEzhDllFnUuM57kaS6aPAy04Il35DQKYWWt/FeAp'
+            '/hw8CTCX0hhNaWOMp38Tiuj+mSsUmwkq/71R9VsY0EN+k+BDXpaJHIJO9Dk+mm08P0ILWT7/sMJy'
+            '225r81jyLmvsth4Kw47T4NqkJlP0/Tvs'
+        )
+
         for chan in ch_list.json()["channels"]:
 
             if epg:
@@ -384,6 +400,7 @@ def channel_list(session, epg=False):
                     f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
                     f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
                     f'#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha\n' \
+                    f'#KODIPROP:inputstream.adaptive.server_certificate={certificate}\n' \
                     f'#KODIPROP:inputstream.adaptive.license_key=http://localhost:4800/api/live/{chan["serviceKey"]}/license||R' + '{SSM}|\n' \
                     f'#EXTINF:0001 tvg-id="{chan["name"]}" tvg-logo="{chan["logo"]["Dark"].replace("{width}", "300").replace("{height}", "300")}", {chan["name"]}\n' \
                     f'http://localhost:4800/api/live/{chan["serviceKey"]}/manifest.mpd\n'
@@ -499,42 +516,24 @@ def content_mpd(session, c_type, c_id):
 #
 
 def content_license(c_id, cdm_payload):
-    if not cdm_payload:
-       try:
-            d = tools.get_cdm_keys(release_pids[c_id]["mpd"], release_pids[c_id]["wv"].split('|')[0], headers["user-agent"])
-            return d['key']
-       except:
-           xbmcgui.Dialog().notification(__addonname__, f"Failed to load the license: {str(d['error'])}", xbmcgui.NOTIFICATION_ERROR)
-           return
-
     x = 10
     while True:
         if release_pids.get(c_id):
+            lic_headers = {'User-Agent': headers["user-agent"], 'Content-Type': 'application/octet-stream'}
+            cdm_request = requests.post(release_pids[c_id]["wv"], headers=lic_headers, data=cdm_payload)
             try:
-                cdm_request = requests.post(release_pids[c_id]["wv"], headers=headers, data=cdm_payload)
-                try:
-                    j = json.loads(cdm_request.content)
-                    if j.get("description"):
-                        raise Exception(f"{j.get('errorCode', 'ERROR')}: {j['description']}")
-                except:
-                    pass
-                return cdm_request.content
-            except Exception as e:
-                if "Robustness" in str(e):
-                    xbmcgui.Dialog().notification(__addonname__, f"Unfortunately, your device does not support HD streams. Please disable the HD streams in add-on settings.", xbmcgui.NOTIFICATION_ERROR)
-                    return
-                elif "Unsupported" in str(e):
-                    xbmcgui.Dialog().notification(__addonname__, f"Unfortunately, WOW does not support your device.", xbmcgui.NOTIFICATION_ERROR)
-                    return
-                else:
-                    xbmcgui.Dialog().notification(__addonname__, f"Failed to load the wv license: {str(e)}", xbmcgui.NOTIFICATION_ERROR)
-                    return
+                j = json.loads(cdm_request.content)
+                if j.get("description"):
+                    xbmc.log(f"WV API ERROR: {j.get('errorCode', 'ERROR')}: {j['description']}")
+            except:
+                pass
+            return cdm_request.content
         else:
             x = x - 1
         if x == 0:
             break
         time.sleep(0.3)
-    xbmcgui.Dialog().notification(__addonname__, f"No license url found for content id {c_id}.", xbmcgui.NOTIFICATION_ERROR)
+    xbmc.log(f"No license url found for content id {c_id}.")
     return
 
 
