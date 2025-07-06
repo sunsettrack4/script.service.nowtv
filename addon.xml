@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.service.nowtv" name="NOW TV Streamer" version="1.0.9" provider-name="Jan-Luca Neumann">
+<addon id="script.service.nowtv" name="NOW TV Streamer" version="1.1.0" provider-name="Jan-Luca Neumann">
   <requires>
       <import addon="xbmc.python" version="3.0.0"/>
       <import addon="script.module.requests"/>
       <import addon="script.module.bottle"/>
+      <import addon="script.module.dateutil"/>
       <import addon="script.module.xmltodict"/>
   </requires>
   <extension point="xbmc.service" library="service.py" start="startup" />
@@ -17,7 +18,6 @@ M3U URL: http://localhost:4800/api/file/channels.m3u
 EPG URL: http://localhost:4800/api/file/epg.xml
 
 * Login:
-http://localhost:4800/auth
 http://localhost:4800/key</description>
     <description lang="de_DE">Service-Addon zur lokalen Bereitstellung der WOW-Streams
     

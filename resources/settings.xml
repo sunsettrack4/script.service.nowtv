@@ -3,11 +3,8 @@
     <category label="Settings">
         <setting label="Login Settings" type="lsep"/>
         <setting label="Territory" type="labelenum" id="platform_id" values="DE|GB|IT" default="DE" visible="true"/>
-        <setting label="Email/Username" type="text" id="username" default=""/>
-        <setting label="Password" type="text" id="password" option="hidden" enable="!eq(-1,)" default=""/>
         
         <setting label="Device Capabilities" type="lsep"/>
-        <setting label="Enable Dolby 5.1 Audio" type="bool" id="dolby_enabled" default="true"/>
         <setting label="Enable UHD/HD Video" type="bool" id="hd_enabled" default="true"/>
     </category>
 </settings>

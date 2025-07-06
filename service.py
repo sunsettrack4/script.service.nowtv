@@ -1,37 +1,50 @@
 from bottle import request, response, route, run, static_file
 from datetime import datetime, timezone
+from dateutil import tz
 from resources.lib import tools
 from urllib.parse import quote
-import json, random, requests, string, time, urllib, xbmc, xbmcaddon, xbmcgui, xbmcvfs, xmltodict
+import json, requests, time, xbmc, xbmcaddon, xbmcgui, xbmcvfs, xmltodict
 
 
 release_pids = {}
 
 ### NOW PARAMS
-    
-headers = {
-    "x-skyott-device": "TV",
-    "x-skyott-language": "de",
-    "x-skyott-platform": "ANDROIDTV",
-    "x-skyott-proposition": "NOWTV",
-    "x-skyott-provider": "NOWTV",
-    "x-skyott-territory": "DE",
+   
+headers = {   
+    'x-skyott-client-version': '4.3.12',
+    'x-skyott-device': 'TV',
+    'x-skyott-platform': 'ANDROIDTV',
+    'x-skyott-proposition': 'NOWOTT',
+    'x-skyott-provider': 'NOWTV',
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    'sec-ch-ua-platform': '"Windows"',
-    "sec-ch-ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-    "sec-ch-ua-Mobile": "?0"
 }
 
-ui_url = "http://rango.id.wowtv.de"
-persona_url = "https://persona-store.sky.com"
-auth_url = "https://auth.client.ott.sky.com"
-p_url = "https://p.sky.com"
-graph_url = "https://graphql.ott.sky.com"
+ovp_url = "https://ovp"
+web_url = "https://web.clients"
 
-live_hash = "356b08a537f119347994744194e5c42f61fba5ccf5ffbd31bd25af626a2043b5"
-watchlist_hash = "bf69938e7d2b6e17aeb4aeb438253b0afbfae04454447ee0143373abd93f04da"
-continue_hash = "bf69938e7d2b6e17aeb4aeb438253b0afbfae04454447ee0143373abd93f04da"
+cc_urls = {
+    "DE": "wowtv.de", 
+    "GB": "nowtv.com", 
+    "IT": "nowtv.it"
+}
 
+cc_headers = {
+    "DE": {
+        'x-skyott-activeterritory': 'DE',
+        'x-skyott-language': 'de-DE',
+        'x-skyott-territory': 'DE'
+    },
+    "GB": {
+        'x-skyott-activeterritory': 'GB',
+        'x-skyott-language': 'en-GB',
+        'x-skyott-territory': 'GB'
+    },
+    "IT": {
+        'x-skyott-activeterritory': 'IT',
+        'x-skyott-language': 'it-IT',
+        'x-skyott-territory': 'IT'
+    }
+}
 
 # KODI PARAMS
 __addon__ = xbmcaddon.Addon()
@@ -92,48 +105,11 @@ class WebServer():
 
     def get_license(self, c_id, cdm_payload=None):
         return content_license(c_id, cdm_payload)
-    
-    def get_watchlist(self):
-        try:
-            watchlist = personalized_content(self.session, "watchlist")
-        except:
-            watchlist = None
-
-        if not watchlist:
-            self.session = login()
-
-            if not self.session:
-                return
-            else:
-                watchlist = personalized_content(self.session, "watchlist")
-        
-        return watchlist
-
-    def get_continue(self):
-        try:
-            continue_watching = personalized_content(self.session, "continue")
-        except:
-            continue_watching = None
-
-        if not continue_watching:
-            self.session = login()
-
-            if not self.session:
-                return
-            else:
-                continue_watching = personalized_content(self.session, "continue")
-        
-        return continue_watching
   
     def stop_kodi(self):
         # IT'S NOT THE BEST SOLUTION... BUT IT WORKS.
         requests.get("http://localhost:4800")
 
-
-@route("/api/file/status.json", method="GET")
-def status():
-    response.set_header("Content-Type", "application/json")
-    return json.dumps({"territory": __addon__.getSetting("platform_id")})
 
 @route("/api/file/channels.m3u", method="GET")
 def m3u():
@@ -145,16 +121,6 @@ def epg():
     response.set_header("Content-Type", "application/xml")
     return w.get_ch_list(True)
 
-@route("/api/file/watchlist.json", method="GET")
-def watchlist():
-    response.set_header("Content-Type", "application/json")
-    return w.get_watchlist()
-
-@route("/api/file/continue.json", method="GET")
-def continue_watching():
-    response.set_header("Content-Type", "application/json")
-    return w.get_continue()
-
 @route("/api/<content_type>/<content_id>/manifest.mpd", method="GET")
 def play_channel(content_type, content_id):
     response.set_header("Content-Type", "application/dash+xml")
@@ -165,49 +131,35 @@ def proxy_license(content_type, content_id):
     response.set_header("Content-Type", "application/octet-stream")
     return w.get_license(content_id, request.body.read())
 
-@route("/api/<content_type>/<content_id>/license", method="GET")
-def proxy_license(content_type, content_id):
-    response.set_header("Content-Type", "text")
-    return w.get_license(content_id)
-
-@route("/auth", method="GET")
-def auth_get():
-    q = dict(request.query.decode())
-
-    if all(i in q for i in ("auth_token", "persona_id", "device_id")):
-        session = dict()
-
-        # SETUP NEW SESSION
-        session.update({
-            "persona_id": q["persona_id"],    # PERSONA ID
-            "auth_token": q["auth_token"],    # AUTH TOKEN
-            "device_id": q["device_id"]       # DEVICE ID
-        })
-
-        # SAVE NEW SESSION
-        try:
-            with open(f"{__addondir__}session.json", "w") as f:
-                f.write(json.dumps(session))
-        except:
-            xbmc.log(f"WARNING: Failed to save session file")
-            pass
-        
-        return "Your cookies have been transmitted to your device. Please restart Kodi."
-    else:
-        return static_file("input.html", root=__addonpath__)
-
 @route("/key", method="GET")
 def auth_key():
     return static_file("key.html", root=__addonpath__)
 
+@route("/auth", method="GET")
+def auth_json():
+    return static_file("auth.html", root=__addonpath__)
+
 @route("/key", method="POST")
+@route("/auth", method="POST")
 def auth_key_upload():
     try:
         session = dict()
-        messo = None
+        f = []
 
-        f = json.loads(request.files.key.file.read())["data"].split(";")
+        # KEY FILE
+        try:
+            f = json.loads(request.files.key.file.read())["data"].split(";")
+        except:
+            pass
         
+        # JSON FILE
+        if len(f) == 0:
+            try:
+                f = [f"{i['name']}={i['value']}" for i in json.loads(request.files.json.file.read())]
+            except:
+                return f"Unable to read the uploaded file"
+        
+        messo = None
         for i in f:
             if "personaId" in i:
                 session.update({"persona_id": i.split("=")[1]})
@@ -215,25 +167,30 @@ def auth_key_upload():
                 session.update({"auth_token": i.split("=")[1]})
             elif "deviceid" in i:
                 session.update({"device_id": i.split("=")[1]})
-            elif "skyCEsidismesso01" in i:
+            elif "skyCEsidismesso01" in i or ("skyCEsidmesso01" in i and not messo):
                 messo = i.split("=")[1]
         
         if not session.get("persona_id") and messo:
+            if not session.get("auth_token"):
+                xbmcgui.Dialog().notification(__addonname__, f"Error: Missing auth token in cookie file", xbmcgui.NOTIFICATION_ERROR)
+                xbmc.log(f"ERROR: Missing auth token in cookie file")
+                return "Missing auth token in cookie file"
+            
+            cc = __addon__.getSetting("platform_id")
             r = requests.Session()
             r.headers = headers
-            r.headers.update({"x-skyott-territory": __addon__.getSetting("platform_id")})
-            r.headers.update({
-                'X-Skyid-Token': messo,
-                'X-Skyott-Tokentype': 'MESSO',
-                "Accept": "application/vnd.persona.v1+json"
-            })
-
-            persona = r.get(f'{persona_url}/persona-store/personas')
+            r,headers.update(cc_headers[cc])
+            r.headers.update({'Accept': 'application/json, text/javascript, */*; q=0.01'})
+            r.cookies.update({i.split("=")[0]: i.split("=")[1] for i in f})
+            persona = r.post(f'{web_url}.{cc_urls[cc]}/bff/personas/v2')
             
             try:
-                session.update({"persona_id": persona.json()['personas'][0]['personaId']})
-            except Exception:
-               return "Failed to obtain the personaId."
+                persona_id = persona.json()['personas'][0]['id']
+                session.update({"persona_id": persona_id})
+            except Exception as e:
+                xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve persona id: {str(e)} / {str(persona.content)}", xbmcgui.NOTIFICATION_ERROR)
+                xbmc.log(f"ERROR: Unable to retrieve persona id: {str(e)} / {str(persona.content)}")
+                return "Unable to retrieve persona id"
             
         # SAVE NEW SESSION
         if "persona_id" in session and "auth_token" in session and "device_id" in session:
@@ -276,20 +233,10 @@ def login():
         except:
             session = {}
 
-    __username = __addon__.getSetting("username")
-    __password = __addon__.getSetting("password")
     cc = __addon__.getSetting("platform_id")
-
-    if not __username or not __password:
-        xbmcgui.Dialog().notification(__addonname__, "Please add your credentials in add-on settings.", xbmcgui.NOTIFICATION_ERROR)
-        xbmc.log("ERROR: Please add your credentials in add-on settings.")
-        return
-
-    # RETRIEVE SESSION DATA
     r = requests.Session()
-    r.headers = headers
-    r.headers.update({"x-skyott-territory": cc})
-
+    
+    # RETRIEVE SESSION DATA
     if session.get("auth_token") and session.get("persona_id") and session.get("device_id"):
 
         auth_token = session["auth_token"]
@@ -298,61 +245,18 @@ def login():
 
     else:
 
-        data = {"rememberMe": True, "userIdentifier": __username, "password": __password}
-
-        account = r.post(f"{ui_url}/signin/service/international", data=data)
-
-        if account.status_code == 422:
-            xbmcgui.Dialog().notification(__addonname__, "Error: Authentication failure - invalid credentials", xbmcgui.NOTIFICATION_ERROR)
-            xbmc.log("ERROR: Authentication failure - invalid credentials")
-            return
-        elif account.status_code == 403:
-            xbmcgui.Dialog().notification(__addonname__, "Error: Resource unavailable, please check your IP address.", xbmcgui.NOTIFICATION_ERROR)
-            xbmc.log("ERROR: Resource unavailable, please check your IP address.")
-            return
-
-        try:
-            device_uuid = account.json()["properties"]["data"]["deviceid"]
-
-            cookies = r.cookies.get_dict()
-            token_temp = cookies['skySSO']
-            x_sky_id_token = cookies['skyCEsidismesso01']
-            auth_token = cookies['skyCEsidexsso01']
-        except Exception as e:
-            if "289" in str(account.content):
-                xbmcgui.Dialog().notification(__addonname__, f"Error: Login failed - captcha challenge is required", xbmcgui.NOTIFICATION_ERROR)
-                xbmc.log(f"ERROR: Login failed - captcha challenge is required")
-            else:
-                xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}", xbmcgui.NOTIFICATION_ERROR)
-                xbmc.log(f"ERROR: Unable to retrieve device id/cookie values: {str(e)} / {str(account.content)}")
-            return
-
-        # RETRIEVE PERSONA ID
-        r.headers.update({
-            'X-Skyid-Token': x_sky_id_token,
-            'X-Skyott-Tokentype': 'MESSO',
-            "Accept": "application/vnd.persona.v1+json"
-        })
-
-        persona = r.get(f'{persona_url}/persona-store/personas')
-        del r.headers["Accept"], r.headers["X-Skyott-Tokentype"], r.headers["X-Skyid-Token"]
-        
-        try:
-            persona_id = persona.json()['personas'][0]['personaId']
-        except Exception as e:
-            xbmcgui.Dialog().notification(__addonname__, f"Error: Unable to retrieve persona id: {str(e)} / {str(persona.content)}", xbmcgui.NOTIFICATION_ERROR)
-            xbmc.log(f"ERROR: Unable to retrieve persona id: {str(e)} / {str(persona.content)}")
-            return
-        
-        device_id = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+        xbmc.log(f"ERROR: Unable to retrieve auth data")
+        return
 
     # RETRIEVE USER TOKEN
-    messo_data = {"auth":{"authScheme":"MESSO","authIssuer":"NOWTV","provider":"NOWTV","providerTerritory":cc,"proposition":"NOWTV","authToken":auth_token,"personaId":persona_id},"device":{"type":"TV","platform":"ANDROIDTV","id":device_id,"drmDeviceId":"UNKNOWN"}}
+    r.headers = {'Accept': 'application/vnd.tokens.v1+json', 'Content-Type': 'application/vnd.tokens.v1+json'}
+    url = f'{ovp_url}.{cc_urls[cc]}/auth/throttled/tokens'
+    oauth_data = {"auth":{"authScheme":"MESSO","authIssuer":"NOWTV","authToken":auth_token,"personaId":persona_id,"provider":"NOWTV","providerTerritory":cc,"proposition":"NOWOTT"},"device":{"type":"TV","platform":"ANDROIDTV","id":device_id,"drmDeviceId":"UNKNOWN"}}
     
-    signature = tools.calculate_signature('POST', f'{p_url}/auth/tokens', r.headers, json.dumps(messo_data))
-    r.headers.update({'x-sky-signature': signature, 'Content-Type': 'application/vnd.tokens.v1+json'})
+    signature = tools.calculate_signature('POST', url, r.headers, json.dumps(oauth_data))
+    r.headers.update({'x-sky-signature': signature})
     
-    token = r.post(f'{p_url}/auth/tokens', data=json.dumps(messo_data))
+    token = r.post(url, data=json.dumps(oauth_data))
     del r.headers["Content-Type"], r.headers["x-sky-signature"]
     
     try:
@@ -389,116 +293,98 @@ def login():
 #
 
 def channel_list(session, epg=False):
-    sections = []
+    cc = __addon__.getSetting("platform_id")
     
     r = requests.Session()
     r.headers = headers
+    r.headers.update(cc_headers[cc])
     r.headers.update({"x-skyott-usertoken": session["user_token"]})
     
     # RETRIEVE PACKAGES
-    signature = tools.calculate_signature('GET', f'{p_url}/auth/users/me', r.headers, "")
+    url = f'{ovp_url}.{cc_urls[cc]}/auth/users/me'
+    signature = tools.calculate_signature('GET', url, r.headers, "")
     r.headers.update({'x-sky-signature': signature, 'Content-Type': 'application/vnd.userinfo.v2+json', 'Accept': 'application/vnd.userinfo.v2+json'})
     
-    me = r.get(f"{p_url}/auth/users/me")
+    me = r.get(url)
     del r.headers["x-skyott-usertoken"], r.headers["x-sky-signature"], r.headers["Content-Type"], r.headers["Accept"]
     
     try:
-        packages = [i["name"] for i in me.json()["segmentation"]["content"]]
+        packages = ",".join([i["name"] for i in me.json()["segmentation"]["content"]])
     except:
         xbmcgui.Dialog().notification(__addonname__, "Failed to load channel packages", xbmcgui.NOTIFICATION_ERROR)
         return
-    
-    if "MOVIES" in packages:
-        sections.append("CINEMA")
-    if "ENTERTAINMENT" in packages:
-        sections.extend(["ENTERTAINMENT", "KIDS"])
-    if "SPORTS" in packages:
-        sections.append("SPORT")
 
     # GET SERVICE KEYS
-    extensions = '{"persistedQuery":{"version":1,"sha256Hash":"'+live_hash+'"}}'
-    
-    cc = __addon__.getSetting("platform_id")
-    lang = "de" if cc == "DE" else "" if cc == "IT" else "en"
-    r.headers.update({'x-skyott-language': lang})
+    now  = datetime.now(tz.tzlocal())
+    now  = now.replace(minute=0, second=0, microsecond=0)
+    date = now.strftime('%Y-%m-%dT%H:%M%z')
+    date = date[:-2] + ':' + date[-2:]
+    url  = f"{web_url}.{cc_urls[cc]}/bff/channel_guide?startTime={quote(date)}"
+    url += '&playout_content_segments={0}&discovery_content_segments={0}'.format(packages)
+
+    r.headers.update({'x-skyott-endorsements': 'videoFormat; caps="UHD",colorSpace; caps="HDR",audioFormat; caps="Stereo"'})
+    ch_list = r.get(url)
 
     output = {"tv": {}} if epg else "#EXTM3U\n" 
     ch = {"channel": []}
     pr = {"programme": []}
     
-    try:
-        for package in sections:
-            variables  = '{"sectionNavigation":"'+package+'","formatType":null,"defaultFormat":"HD"}'
-            url = f'{graph_url}/graphql?extensions={quote(extensions)}&variables={quote(variables)}'
+    try:    
+        for chan in ch_list.json()["channels"]:
 
-            ch_list = r.get(url)
-            
-            for chan in ch_list.json()["data"]["linearChannels"]:
+            if epg:
+                ch_id   = chan["serviceKey"]
+                ch_name = chan["name"]
+                ch_logo = chan["logo"]["Dark"].replace("{width}", "300").replace("{height}", "300")
 
-                if epg:
-                    ch_id   = chan["serviceKey"]
-                    ch_name = chan["name"].replace(" SD", "")
-                    ch_logo = chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")
+                ch_part = {"@id": ch_name, "display-name": {"@lang": "de", "#text": ch_name}, "icon": {"@src": ch_logo}}
+                ch["channel"].append(ch_part)
 
-                    ch_part = {"@id": ch_name, "display-name": {"@lang": "de", "#text": ch_name}, "icon": {"@src": ch_logo}}
-                    ch["channel"].append(ch_part)
+                for i in range(0, len(chan["scheduleItems"])):
+                    pr_start = datetime.fromtimestamp(float(chan["scheduleItems"][i]["startTimeUTC"]), timezone.utc).strftime("%Y%m%d%H%M%S +0000")
+                    pr_stop  = datetime.fromtimestamp(float(chan["scheduleItems"][i]["startTimeUTC"] + chan["scheduleItems"][i]["durationSeconds"]), timezone.utc).strftime("%Y%m%d%H%M%S +0000")
+                    pr_title = chan["scheduleItems"][i]["data"]["title"]
+                    pr_genre = "Magazines / Reports / Documentary" if ch_id in ["13","112","113","118","130","402"] \
+                        else "Sports" if "SPORTS" in packages or "Sport" in ch_name \
+                        else "Movie / Drama" if "ENTERTAINMENT" in packages or "CINEMA" in packages \
+                        else "Children's / Youth programs" if "KIDS" in packages \
+                        else None
+                    pr_desc  = chan["scheduleItems"][i]["data"].get("description")
+                    pr_image = chan["scheduleItems"][i]["data"].get("images", {"16-9": None}).get("16-9")
+                    pr_sr_no = chan["scheduleItems"][i]["data"].get("seasonNumber")
+                    pr_ep_no = chan["scheduleItems"][i]["data"].get("episodeNumber")
+                    pr_fsk   = chan["scheduleItems"][i]["data"].get("ageRating", {"display": None}).get("display")
 
-                    for i in ["now", "next"]:
-                        pr_start = datetime.fromtimestamp(float(chan[i]["startTimeEpoch"]), timezone.utc).strftime("%Y%m%d%H%M%S +0000")
-                        pr_stop  = datetime.fromtimestamp(float(chan[i]["startTimeEpoch"] + chan[i]["durationInSeconds"]), timezone.utc).strftime("%Y%m%d%H%M%S +0000")
-                        pr_title = chan[i]["title"]
-                        pr_genre = "Magazines / Reports / Documentary" if ch_id in ["13","112","113","118","130","402"] \
-                            else "Sports" if package == "SPORTS" or "Sport" in ch_name \
-                            else "Movie / Drama" if package in ["ENTERTAINMENT", "CINEMA"] \
-                            else "Children's / Youth programs" if package == "KIDS" \
-                            else None
-                        pr_desc  = chan[i].get("synopsis")
-                        pr_image = chan[i].get("imageUrl")
-                        pr_sr_no = chan[i].get("seasonNumber")
-                        pr_ep_no = chan[i].get("episodeNumber")
-                        pr_fsk   = chan[i].get("ottCertificate")
+                    prg = {
+                        "@start": pr_start, 
+                        "@stop": pr_stop, 
+                        "@channel": ch_name,
+                        "title": pr_title
+                    }
 
-                        prg = {
-                            "@start": pr_start, 
-                            "@stop": pr_stop, 
-                            "@channel": ch_name,
-                            "title": pr_title
-                        }
+                    if pr_desc:
+                        prg["desc"] = {"@lang": "de", "#text": pr_desc}
+                    if pr_image:
+                        prg["icon"] = {"@src": pr_image}
+                    if pr_sr_no and pr_ep_no:
+                        prg["episode-num"] = {"@system": "xmltv_ns", "#text": f"{int(pr_sr_no) - 1} . {int(pr_ep_no) - 1} . "}
+                    if pr_fsk:
+                        prg["rating"] = {"@system": "FSK", "value": {"#text": str(pr_fsk)}}
+                    if pr_genre:
+                        prg["category"] = [{"@lang": "en", "#text": pr_genre}]
+                    
+                    pr["programme"].append(prg)
 
-                        if pr_desc:
-                            prg["desc"] = {"@lang": "de", "#text": pr_desc}
-                        if pr_image:
-                            prg["icon"] = {"@src": pr_image}
-                        if pr_sr_no and pr_ep_no:
-                            prg["episode-num"] = {"@system": "xmltv_ns", "#text": f"{int(pr_sr_no) - 1} . {int(pr_ep_no) - 1} . "}
-                        if pr_fsk:
-                            prg["rating"] = {"@system": "FSK", "value": {"#text": str(pr_fsk)}}
-                        if pr_genre:
-                            prg["category"] = [{"@lang": "en", "#text": pr_genre}]
-                        
-                        pr["programme"].append(prg)
+            else:
 
-                else:
-
-                    if not xbmc.getCondVisibility('system.platform.android'):
-
-                        output = \
-                            f'{output}' \
-                            f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
-                            f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
-                            f'#EXTINF:0001 tvg-id="{chan["name"].replace(" SD", "")}" tvg-logo="{chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")}", {chan["name"].replace(" SD", "")}\n' \
-                            f'plugin://plugin.video.nowtv/?type=live&location={chan["serviceKey"]}\n'
-
-                    else:
-
-                        output = \
-                            f'{output}' \
-                            f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
-                            f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
-                            f'#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha\n' \
-                            f'#KODIPROP:inputstream.adaptive.license_key=http://localhost:4800/api/live/{chan["serviceKey"]}/license||R' + '{SSM}|\n' \
-                            f'#EXTINF:0001 tvg-id="{chan["name"].replace(" SD", "")}" tvg-logo="{chan["logos"][0]["template"].replace("light", "dark").replace("{width}", "300").replace("{height}", "300")}", {chan["name"].replace(" SD", "")}\n' \
-                            f'http://localhost:4800/api/live/{chan["serviceKey"]}/manifest.mpd\n'
+                output = \
+                    f'{output}' \
+                    f'#KODIPROP:inputstreamclass=inputstream.adaptive\n' \
+                    f'#KODIPROP:inputstream.adaptive.manifest_type=mpd\n' \
+                    f'#KODIPROP:inputstream.adaptive.license_type=com.widevine.alpha\n' \
+                    f'#KODIPROP:inputstream.adaptive.license_key=http://localhost:4800/api/live/{chan["serviceKey"]}/license||R' + '{SSM}|\n' \
+                    f'#EXTINF:0001 tvg-id="{chan["name"]}" tvg-logo="{chan["logo"]["Dark"].replace("{width}", "300").replace("{height}", "300")}", {chan["name"]}\n' \
+                    f'http://localhost:4800/api/live/{chan["serviceKey"]}/manifest.mpd\n'
         
         if epg:
             output["tv"]["channel"] = ch["channel"]
@@ -516,14 +402,16 @@ def channel_list(session, epg=False):
 #
 
 def content_mpd(session, c_type, c_id):
+    cc = __addon__.getSetting("platform_id")
 
     if release_pids.get(c_id, {"exp": 0})["exp"] <= int(datetime.now().timestamp()):
 
-        dolby_enabled = True if __addon__.getSetting("dolby_enabled") == "true" else False
         hd_enabled = True if __addon__.getSetting("hd_enabled") == "true" else False
 
         r = requests.Session()
         r.headers = headers
+        r.headers.update(cc_headers[cc])
+
         r.headers.update({"x-skyott-usertoken": session["user_token"], 'x-skyott-pinoverride': 'true', 'Content-Type': f'application/vnd.play{c_type}.v1+json'})
 
         data = {
@@ -544,68 +432,34 @@ def content_mpd(session, c_type, c_id):
                 "container": "ISOBMFF"
                 }           
             ],
-            "model": "PC",
+            "maxVideoFormat": "HD",
+            "model": "Pixel",
             "hdcpEnabled": "false",
-            "supportedColourSpaces": []
+            "supportedColourSpaces": ["SDR"]
         },
         "client": {
-            "thirdParties": []
+            "thirdParties": ["FREEWHEEL"]
         },
-        "parentalControlPin": None
+        "parentalControlPin": "null",
+        "personaParentalControlRating": "19"
         }
 
         if c_type == "live":
             data["serviceKey"] = c_id
-        elif c_type == "vod":
-            data["contentId"] = c_id
-            data["providerVariantId"] = c_id
-
-        if dolby_enabled:
-            data["device"]["capabilities"].extend([
-                {
-                "transport": "DASH",
-                "protection": "WIDEVINE",
-                "vcodec": "H264",
-                "acodec": "EAC",
-                "container": "TS"
-                },
-                {
-                "transport": "DASH",
-                "protection": "WIDEVINE",
-                "vcodec": "H264",
-                "acodec": "EAC",
-                "container": "ISOBMFF"
-                }  
-            ])
 
         if hd_enabled:
             data["device"]["maxVideoFormat"] = "UHD"
 
-        signature = tools.calculate_signature('POST', f'{p_url}/video/playouts/{c_type}', headers, json.dumps(data))
+        url = f'{ovp_url}.{cc_urls[cc]}/video/playouts/{c_type}'
+        signature = tools.calculate_signature('POST', url, headers, json.dumps(data))
         r.headers.update({'x-sky-signature': signature})
 
-        ch = r.post(f'{p_url}/video/playouts/{c_type}', json=data)
+        ch = r.post(url, json=data)
 
         try:
             mpd_url = ch.json()['asset']['endpoints'][0]['url'].split("?")[0]
             wv_url = ch.json()['protection']['licenceAcquisitionUrl']
             exp = int(datetime.now().timestamp()) + 300
-
-            # Add content to continueWatching list
-            try:
-                if c_type == "vod":
-                    ticket_id = ch.json()['session']['streamingTicketId']
-                    ticket_url = f"{p_url}/concurrency/streams/{ticket_id}"
-
-                    del r.headers['x-sky-signature']
-                    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
-                    signature = tools.calculate_signature('PUT', ticket_url, headers, json.dumps({"streamPosition": 0}))
-                    r.headers.update({'x-sky-signature': signature})
-
-                    r.put(ticket_url, json={"streamPosition": 0})
-                    del r.headers["x-sky-signature"], r.headers["Content-Type"]
-            except:
-                pass
 
         except Exception as e:
             if "necessary role" in str(ch.content):
@@ -653,9 +507,7 @@ def content_license(c_id, cdm_payload):
     while True:
         if release_pids.get(c_id):
             try:
-                signature = tools.calculate_signature('POST', release_pids[c_id]["wv"], {}, cdm_payload)
-                drm_headers = {'x-sky-signature': signature}
-                cdm_request = requests.post(release_pids[c_id]["wv"], headers=drm_headers, data=cdm_payload)
+                cdm_request = requests.post(release_pids[c_id]["wv"], headers=headers, data=cdm_payload)
                 try:
                     j = json.loads(cdm_request.content)
                     if j.get("description"):
@@ -680,35 +532,6 @@ def content_license(c_id, cdm_payload):
         time.sleep(0.3)
     xbmcgui.Dialog().notification(__addonname__, f"No license url found for content id {c_id}.", xbmcgui.NOTIFICATION_ERROR)
     return
-
-
-#
-# PERSONALIZED - WATCHLIST/CONTINUE WATCHING
-#
-
-def personalized_content(session, p_type="watchlist"):
-
-    getWatchlist = "true" if p_type == "watchlist" else "false"
-    getContinueWatching = "true" if p_type == "continue" else "false"
-    sha256Hash = watchlist_hash if p_type == "watchlist" else continue_hash
-
-    extensions = '{"persistedQuery":{"version":1,"sha256Hash":"'+sha256Hash+'"}}'
-    variables  = '{"fullWidthHeroImages":false,"getContinueWatching":'+getContinueWatching+',"getWatchlist":'+getWatchlist+',"getFavourites":false,"getBecauseYouWatched":false,"getPersonalisedGenres":false}'
-    
-    url = f"{graph_url}/personalised?extensions={quote(extensions)}&variables={quote(variables)}"
-    
-    r = requests.Session()
-    r.headers = headers
-    r.headers.update({"x-skyott-usertoken": session["user_token"]})
-
-    me = r.get(url)
-    del r.headers["x-skyott-usertoken"]
-
-    try:
-        return me.json()
-    except Exception as e:
-        xbmcgui.Dialog().notification(__addonname__, f"Failed to load personalized content: {str(e)}", xbmcgui.NOTIFICATION_ERROR)
-        return
 
 
 #
