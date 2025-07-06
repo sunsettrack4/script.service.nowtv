@@ -500,11 +500,9 @@ def content_mpd(session, c_type, c_id):
     if c_type == "live":
         if type(xml["MPD"]["Period"]) == list:
             for i in xml["MPD"]["Period"]:
-                i["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
+                i["BaseURL"] = f"{mpd_url.split('/master')[0]}/" 
         else:        
-            xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/index')[0]}/" 
-    elif c_type == "vod":
-        xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
+            xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/master')[0]}/"
 
     release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "track": track_url, "exp": exp}
 
