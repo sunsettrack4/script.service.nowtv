@@ -537,27 +537,6 @@ def content_license(c_id, cdm_payload):
     xbmcgui.Dialog().notification(__addonname__, f"No license url found for content id {c_id}.", xbmcgui.NOTIFICATION_ERROR)
     return
 
-#
-# TRACK PLAYBACK POSITION
-#
-def track_playback_position(session, url, position):
-
-    data = {"streamPosition": position}
-
-    r = requests.Session()
-    r.headers = headers
-    r.headers.update({"x-skyott-usertoken": session["user_token"]})
-    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
-    signature = tools.calculate_signature('PUT', url, headers, json.dumps(data))
-    r.headers.update({'x-sky-signature': signature})
-
-    res = r.put(url, json=data)
-    del r.headers["x-skyott-usertoken"], r.headers["Content-Type"], r.headers["x-sky-signature"]
-
-    if res.status_code == 204:
-        return True
-    else:
-        return False
 
 #
 # MAIN PROCESS
