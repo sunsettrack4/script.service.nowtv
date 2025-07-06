@@ -105,7 +105,6 @@ class WebServer():
 
     def get_license(self, c_id, cdm_payload=None):
         return content_license(c_id, cdm_payload)
-  
     def stop_kodi(self):
         # IT'S NOT THE BEST SOLUTION... BUT IT WORKS.
         requests.get("http://localhost:4800")
@@ -207,6 +206,9 @@ def auth_key_upload():
     except Exception as e:
         return f"Invalid file {str(e)}"
 
+@route("/api/<content_id>/playback/<position>", method="POST")
+def playback_position(content_id, position):
+    w.playback_position(content_id, position)
 
 #
 # LOGIN
@@ -459,6 +461,7 @@ def content_mpd(session, c_type, c_id):
         try:
             mpd_url = ch.json()['asset']['endpoints'][0]['url'].split("?")[0]
             wv_url = ch.json()['protection']['licenceAcquisitionUrl']
+            track_url = ch.json()['events']['heartbeat']['url']
             exp = int(datetime.now().timestamp()) + 300
 
         except Exception as e:
@@ -471,6 +474,7 @@ def content_mpd(session, c_type, c_id):
     else:
         mpd_url = release_pids[c_id]["mpd"]
         wv_url = release_pids[c_id]["wv"]
+        track_url = release_pids[c_id]["track"]
         exp = release_pids[c_id]["exp"]
 
     mpd = requests.get(mpd_url)
@@ -485,7 +489,7 @@ def content_mpd(session, c_type, c_id):
     elif c_type == "vod":
         xml["MPD"]["Period"]["BaseURL"] = f"{mpd_url.split('/manifest')[0]}/"
 
-    release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "exp": exp}
+    release_pids[c_id] = {"wv": wv_url, "mpd": mpd_url, "track": track_url, "exp": exp}
 
     return xmltodict.unparse(xml, pretty=True)
 
@@ -533,6 +537,27 @@ def content_license(c_id, cdm_payload):
     xbmcgui.Dialog().notification(__addonname__, f"No license url found for content id {c_id}.", xbmcgui.NOTIFICATION_ERROR)
     return
 
+#
+# TRACK PLAYBACK POSITION
+#
+def track_playback_position(session, url, position):
+
+    data = {"streamPosition": position}
+
+    r = requests.Session()
+    r.headers = headers
+    r.headers.update({"x-skyott-usertoken": session["user_token"]})
+    r.headers.update({"Content-Type": "application/vnd.stopstream.v1+json"})
+    signature = tools.calculate_signature('PUT', url, headers, json.dumps(data))
+    r.headers.update({'x-sky-signature': signature})
+
+    res = r.put(url, json=data)
+    del r.headers["x-skyott-usertoken"], r.headers["Content-Type"], r.headers["x-sky-signature"]
+
+    if res.status_code == 204:
+        return True
+    else:
+        return False
 
 #
 # MAIN PROCESS
