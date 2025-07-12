@@ -3,6 +3,7 @@
     <category label="Settings">
         <setting label="Login Settings" type="lsep"/>
         <setting label="Territory" type="labelenum" id="platform_id" values="DE|GB|IT" default="DE" visible="true"/>
+        <setting label="Enable key file export for skyott add-on" type="bool" id="key_dl" default="false"/>
         
         <setting label="Device Capabilities" type="lsep"/>
         <setting label="Enable UHD/HD Video" type="bool" id="hd_enabled" default="true"/>

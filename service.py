@@ -7,6 +7,7 @@ import json, os, requests, time, xbmc, xbmcaddon, xbmcgui, xbmcvfs, xmltodict
 
 
 release_pids = {}
+g = None
 
 ### NOW PARAMS
    
@@ -134,6 +135,13 @@ def proxy_license(content_type, content_id):
 def auth_key():
     return static_file("key.html", root=__addonpath__)
 
+@route("/dl_<key_file>", method="GET")
+def get_key_file(key_file):
+    if "_login.key" in key_file and __addon__.getSetting("key_dl") == "true":
+        return static_file(key_file, root=__addondir__, download=True, mimetype=True)
+    else:
+        return
+
 @route("/auth", method="GET")
 def auth_json():
     return static_file("auth.html", root=__addonpath__)
@@ -149,6 +157,8 @@ def auth_key_upload():
     try:
         session = dict()
         f = []
+        g = None
+        domain = ""
 
         # KEY FILE
         try:
@@ -159,7 +169,27 @@ def auth_key_upload():
         # JSON FILE
         if len(f) == 0:
             try:
-                f = [f"{i['name']}={i['value']}" for i in json.loads(request.files.json.file.read())]
+                l = json.loads(request.files.json.file.read())
+                f = [f"{i['name']}={i['value']}" for i in l]
+
+                # CREATE KEY FILE
+                try:
+                    domain = '.'.join(l[0]["domain"].split('.')[-2:])
+                    g = json.dumps({
+                        "url": f"https://www.{domain}/home",
+                        "app_name": "SkyExtractCookie",
+                        "version": "1.0.5",
+                        "app_system": "android",
+                        "host": f"https://www.{domain}",
+                        "data": "; ".join(f),
+                        "timestamp": str(int(time.time())*1000)
+                    })
+
+                    with open(f"{__addondir__}{domain.split('.')[0]}_login.key", "w") as p:
+                        p.write(g)
+
+                except:
+                    pass
             except:
                 return f"Unable to read the uploaded file"
         
@@ -206,7 +236,11 @@ def auth_key_upload():
         else:
             return "Failed to retrieve the cookie data."
         
-        return "Your cookies have been transmitted to your device. Please restart Kodi."
+        result = "Your cookies have been transmitted to your device. Please restart Kodi."
+        if g and __addon__.getSetting("key_dl") == "true":
+            result = result + f' <a href="/dl_{domain.split(".")[0]}_login.key">Download key file for skyott add-on</a>'
+        
+        return result
             
     except Exception as e:
         return f"Invalid file {str(e)}"
